@@ -1,6 +1,6 @@
 ﻿using Elements.Geometry.Tessellation;
 using Elements.Geometry;
-using glTFLoader.Schema;
+//using glTFLoader.Schema;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -8,6 +8,7 @@ using Elements.Geometry.Interfaces;
 using Elements.Serialization.glTF;
 using System.IO;
 using System.Linq;
+using static glTFLoader.Schema.MeshPrimitive;
 
 namespace Elements.Utilities
 {
@@ -19,21 +20,37 @@ namespace Elements.Utilities
         /// <summary>
         /// Translate the element geometry to the GraphicsBuffer structure, making it easier to push it to gltf or other visualization tools.
         /// </summary>
-        public static GraphicsBuffers ProcessGeometricRepresentation(
+        public static List<GraphicsBuffers> ProcessGeometricRepresentation(
             GeometricElement geometricElement, 
-            bool updateElementRepresentations)
+            bool updateElementRepresentations,
+            out ModeEnum? mode)
         {
-            GraphicsBuffers buffers = null;
+            List<GraphicsBuffers> buffers = null;
             if (updateElementRepresentations)
             {
                 geometricElement.UpdateRepresentations();
             }
 
-            geometricElement.UpdateBoundsAndComputeSolid();
+            geometricElement.UpdateBoundsAndComputeSolid(true);
 
+            //Se já conseguir obter os buffers internamente, seguir o bonde
+            if (geometricElement.TryToGraphicsBuffers(out buffers, out string id, out mode))
+            {
+                return buffers;
+            }
+            //Se houver representação, puxar o buffer do sólido
             if (geometricElement.Representation != null && geometricElement._csg != null)
             {
-                buffers = ProcessSolidsAsCSG(geometricElement);
+                buffers = new List<GraphicsBuffers>() { ProcessSolidsAsCSG(geometricElement) };
+                mode = ModeEnum.TRIANGLES;
+            }
+            //Se for um elemento tesselável (em geral um mesh), tesselar
+            if(geometricElement is ITessellate tess)
+            {
+                var mesh = new Mesh();
+                tess.Tessellate(ref mesh);
+                buffers = new List<GraphicsBuffers>() { mesh.GetBuffers() };
+                mode = ModeEnum.TRIANGLES;
             }
             return buffers;
         }
